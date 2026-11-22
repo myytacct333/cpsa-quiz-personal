@@ -40,6 +40,9 @@
   .muted{color:var(--muted);font-size:14px}
   .tools{margin-top:12px}
   .hidden{display:none!important}
+  .gate{max-width:520px;margin:60px auto;padding:0 16px;text-align:center}
+  .gate .card{text-align:left}
+  .gate h2{margin:0 0 8px;font-size:20px}
   /* AI panel */
   .ai{margin-top:16px;border-top:1px dashed var(--line);padding-top:14px}
   .ai-out{background:var(--soft);border-radius:10px;padding:12px 14px;margin-top:10px;font-size:15px;overflow-wrap:anywhere}
@@ -73,7 +76,23 @@
   <div class="bar"><div id="bar"></div></div>
 </header>
 
-<main>
+<div class="gate" id="gate">
+  <div class="card">
+    <h2 id="gateTitle">Loading…</h2>
+    <p class="muted" id="gateText"></p>
+    <div class="row" style="margin-top:12px">
+      <button class="btn primary hidden" id="gateSignIn">Sign in with Google</button>
+      <button class="btn hidden" id="gateSignOut">Sign out</button>
+    </div>
+    <div class="hidden" id="importBox" style="margin-top:14px">
+      <p class="muted">Choose the <code>questions.js</code> file from the zip (or a .json file of questions). It's uploaded to your private database once; after that you can delete it from GitHub.</p>
+      <input type="file" id="importFile" accept=".js,.json,.txt">
+      <p class="muted" id="importMsg"></p>
+    </div>
+  </div>
+</div>
+
+<main class="hidden" id="appMain">
   <div class="card" id="card">
     <div class="qnum" id="qnum"></div>
     <p class="qtext" id="qtext"></p>
@@ -114,7 +133,7 @@
   <p class="muted">Tip: on a keyboard, press 1–5 to answer and ← → to move. Sign in to sync progress and keep a history of every attempt.</p>
 </main>
 
-<footer>
+<footer class="hidden" id="appFooter">
   <div class="row">
     <button class="btn" id="prevBtn">← Prev</button>
     <span class="grow"></span>
@@ -128,11 +147,10 @@
   <div class="dlg-body" id="dlgBody"></div>
 </dialog>
 
-<script src="questions.js"></script>
 <script src="firebase-config.js"></script>
 <script type="module">
-const Q = window.QUIZ_DATA;                                 // [{id, question, answer, incorrect[]}]
-const QBY = Object.fromEntries(Q.map((q, i) => [q.id, { ...q, i }]));
+let Q = [], QBY = {};                                       // question bank, loaded from Firestore after sign-in
+function setBank(arr) { Q = arr; QBY = Object.fromEntries(Q.map((q, i) => [q.id, { ...q, i }])); }
 const FB_CFG = window.FIREBASE_CONFIG || {};
 const AI_CFG = window.AI_CONFIG || {};
 const SDK = "https://www.gstatic.com/firebasejs/13.4.0";
@@ -213,6 +231,7 @@ function tally(answers) {
   return { answered: v.length, correct: right, wrong: v.length - right, total: Q.length };
 }
 function renderStats() {
+  if (!Q.length) return;
   const t = tally(state.answers), pct = t.answered ? Math.round(t.correct / t.answered * 100) : 0;
   $("attemptLbl").textContent = `· Attempt ${state.attemptNo}`;
   $("stats").textContent = `${t.answered} / ${Q.length} answered · ${t.correct} correct (${pct}%) · ${t.wrong} wrong`;
@@ -220,6 +239,7 @@ function renderStats() {
 }
 let shownQid = null;
 function render() {
+  if (!Q.length) return;
   renderStats();
   state.pos = Math.max(0, Math.min(state.pos | 0, Q.length - 1));
   const list = visibleList();
@@ -290,7 +310,7 @@ $("jumpBtn").onclick = () => {
 $("jump").addEventListener("keydown", e => { if (e.key === "Enter") $("jumpBtn").click(); });
 $("retryBtn").onclick = () => { const q = Q[state.pos]; delete state.answers[q.id]; delete optOrder[q.id]; persist(q.id); render(); };
 document.addEventListener("keydown", e => {
-  if (["INPUT", "SELECT", "TEXTAREA"].includes(e.target.tagName) || $("historyDlg").open) return;
+  if (!Q.length || ["INPUT", "SELECT", "TEXTAREA"].includes(e.target.tagName) || $("historyDlg").open) return;
   if (e.key === "ArrowRight") move(1);
   else if (e.key === "ArrowLeft") move(-1);
   else if (/^[1-9]$/.test(e.key)) { const b = $("opts").children[+e.key - 1]; if (b && !b.disabled) b.click(); }
@@ -493,13 +513,32 @@ $("aiAsk").onsubmit = async e => {
 
 // ======================= boot =======================
 $("mode").value = state.mode;
-render();
+
+// Gate: nothing (not even the questions) is shown until an allowed account signs in.
+function showGate(title, text, { signIn = false, signOut = false, importer = false } = {}) {
+  $("gate").classList.remove("hidden"); $("appMain").classList.add("hidden"); $("appFooter").classList.add("hidden");
+  $("gateTitle").textContent = title; $("gateText").textContent = text || "";
+  $("gateSignIn").classList.toggle("hidden", !signIn); $("gateSignOut").classList.toggle("hidden", !signOut);
+  $("importBox").classList.toggle("hidden", !importer);
+}
+function showApp() {
+  $("gate").classList.add("hidden"); $("appMain").classList.remove("hidden"); $("appFooter").classList.remove("hidden");
+}
+function parseBank(text) {
+  let t = text.trim().replace(/^\s*\/\/.*$/gm, "").trim();
+  t = t.replace(/^window\.QUIZ_DATA\s*=\s*/, "").replace(/;\s*$/, "");
+  let data = JSON.parse(t);
+  if (!Array.isArray(data)) data = Object.keys(data).sort((a, b) => +a - +b).map(k => ({ id: String(k), ...data[k] }));
+  data = data.map((q, i) => ({ id: String(q.id ?? i), question: q.question, answer: q.answer, incorrect: q.incorrect }));
+  if (!data.length || data.some(q => !q.question || !q.answer || !Array.isArray(q.incorrect))) throw new Error("File doesn't look like the question bank.");
+  return data;
+}
 
 if (!FB_CFG.apiKey || FB_CFG.apiKey === "PASTE_HERE") {
   $("authBtn").classList.add("hidden");
-  setSync("Firebase not configured – saving on this device only");
-  $("ai").classList.add("hidden");
+  showGate("Not set up yet", "Fill in firebase-config.js with your Firebase project's values.");
 } else {
+  showGate("Loading…", "");
   const [appMod, authMod, fsMod] = await Promise.all([
     import(`${SDK}/firebase-app.js`), import(`${SDK}/firebase-auth.js`), import(`${SDK}/firebase-firestore.js`)
   ]);
@@ -509,7 +548,7 @@ if (!FB_CFG.apiKey || FB_CFG.apiKey === "PASTE_HERE") {
   if (AI_CFG.recaptchaSiteKey && AI_CFG.recaptchaSiteKey !== "PASTE_HERE" && !emu) {
     try {
       const AC = await import(`${SDK}/firebase-app-check.js`);
-      AC.initializeAppCheck(app, { provider: new AC.ReCaptchaV3Provider(AI_CFG.recaptchaSiteKey), isTokenAutoRefreshEnabled: true });
+      AC.initializeAppCheck(app, { provider: new AC.ReCaptchaEnterpriseProvider(AI_CFG.recaptchaSiteKey), isTokenAutoRefreshEnabled: true });
     } catch (e) { console.warn("App Check init failed", e); }
   }
   auth = A.getAuth(app);
@@ -521,24 +560,67 @@ if (!FB_CFG.apiKey || FB_CFG.apiKey === "PASTE_HERE") {
     window.__fb = { A, auth };
   }
   A.getRedirectResult(auth).catch(() => {});
-  render();
+
+  $("gateSignIn").onclick = () => $("authBtn").click();
+  $("gateSignOut").onclick = () => $("authBtn").click();
+  $("importFile").onchange = async e => {
+    const f = e.target.files[0]; if (!f || !user) return;
+    $("importMsg").textContent = "Uploading…";
+    try {
+      const data = parseBank(await f.text());
+      await F.setDoc(F.doc(db, "bank", "questions"), { questions: data, count: data.length, uploadedAt: Date.now() });
+      $("importMsg").textContent = `Uploaded ${data.length} questions.`;
+      startForUser(user);
+    } catch (err) { console.error(err); $("importMsg").textContent = "Upload failed: " + err.message; }
+  };
 
   $("authBtn").onclick = async () => {
     if (user) { await flush(); await A.signOut(auth); return; }
     const provider = new A.GoogleAuthProvider();
+    const hints = {
+      "auth/configuration-not-found": "Google sign-in isn't turned on. In Firebase: Security → Authentication → Get started → Sign-in method → Google → Enable → Save.",
+      "auth/operation-not-allowed": "Google sign-in isn't enabled. In Firebase: Security → Authentication → Sign-in method → Google → Enable.",
+      "auth/unauthorized-domain": `Add ${location.hostname} in Firebase: Security → Authentication → Settings → Authorized domains.`
+    };
+    const fail = e => { console.error(e); alert("Sign-in failed (" + (e.code || e.message) + ").\n\n" + (hints[e.code] || e.message)); };
     try { await A.signInWithPopup(auth, provider); }
     catch (e) {
-      if (["auth/popup-blocked", "auth/operation-not-supported-in-this-environment"].includes(e.code)) await A.signInWithRedirect(auth, provider);
-      else if (!["auth/popup-closed-by-user", "auth/cancelled-popup-request"].includes(e.code)) alert("Sign-in failed: " + e.message);
+      if (["auth/popup-blocked", "auth/operation-not-supported-in-this-environment"].includes(e.code)) {
+        try { await A.signInWithRedirect(auth, provider); } catch (e2) { fail(e2); }
+      }
+      else if (!["auth/popup-closed-by-user", "auth/cancelled-popup-request"].includes(e.code)) fail(e);
     }
   };
 
   let unsub = null;
-  A.onAuthStateChanged(auth, async u => {
+  A.onAuthStateChanged(auth, u => {
     if (unsub) { unsub(); unsub = null; }
     user = u;
-    if (!u) { progRef = null; $("authBtn").textContent = "Sign in"; setSync("Not signed in – saving on this device"); return; }
+    if (!u) {
+      progRef = null; $("authBtn").textContent = "Sign in"; setSync("");
+      showGate("Private quiz", "Sign in with the Google account that has access.", { signIn: true });
+      return;
+    }
     $("authBtn").textContent = "Sign out";
+    startForUser(u);
+  });
+
+  async function startForUser(u) {
+    showGate("Loading…", `Signed in as ${u.email}`);
+    // 1) Question bank – the security rules only let the allowed account read it.
+    try {
+      const b = await F.getDoc(F.doc(db, "bank", "questions"));
+      if (!b.exists()) { showGate("Upload the question bank", `Signed in as ${u.email}. One-time step:`, { signOut: true, importer: true }); return; }
+      setBank(b.data().questions || []);
+    } catch (e) {
+      console.error(e);
+      if (e.code === "permission-denied") showGate("No access", `${u.email} isn't allowed to use this quiz.`, { signOut: true });
+      else showGate("Couldn't load", e.message + " – check that Firestore is created and the rules are published.", { signOut: true });
+      return;
+    }
+    showApp();
+    $("mode").value = state.mode; render();
+    // 2) Progress sync
     setSync("Loading…");
     progRef = F.doc(db, "progress", u.uid);
     try {
@@ -575,7 +657,7 @@ if (!FB_CFG.apiKey || FB_CFG.apiKey === "PASTE_HERE") {
         }
       });
     } catch (e) { console.error(e); setSync("Sync failed – saving on this device"); }
-  });
+  }
 }
 </script>
 </body>
