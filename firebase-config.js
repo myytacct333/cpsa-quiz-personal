@@ -16,6 +16,6 @@ window.AI_CONFIG = {
   model: "gemini-3.5-flash",
   // reCAPTCHA v3 *site* key registered in Firebase → App Check for your web app.
   // AI Logic's setup turns on App Check enforcement, so AI calls fail until this is filled in.
-  recaptchaSiteKey: "PASTE_HERE"
+  recaptchaSiteKey: "PASTE_HERE",
   claudeUrl: "https://claude.ai/chat/564e7778-77c6-4665-9059-104af1f80f85"
 };
