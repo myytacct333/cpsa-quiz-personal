@@ -40,6 +40,11 @@
   .muted{color:var(--muted);font-size:14px}
   .tools{margin-top:12px}
   .hidden{display:none!important}
+  .notes{margin-top:16px;border-top:1px dashed var(--line);padding-top:14px}
+  textarea.note{width:100%;min-height:76px;font:inherit;font-size:15px;padding:9px 10px;border:1px solid var(--line);border-radius:8px;background:var(--card);color:var(--ink);resize:vertical;margin-top:6px}
+  .noteitem{border-left:3px solid var(--accent);padding:6px 10px;margin:10px 0;background:var(--soft);border-radius:0 8px 8px 0;font-size:14px}
+  .noteitem .q{font-weight:600} .noteitem .c{color:var(--ok)} .noteitem .t{white-space:pre-wrap;margin-top:4px}
+  input.search{width:100%;font:inherit;font-size:15px;padding:8px 10px;border:1px solid var(--line);border-radius:8px;background:var(--card);color:var(--ink)}
   .gate{max-width:520px;margin:60px auto;padding:0 16px;text-align:center}
   .gate .card{text-align:left}
   .gate h2{margin:0 0 8px;font-size:20px}
@@ -102,14 +107,22 @@
     <div class="ai" id="ai">
       <div class="row">
         <button class="btn" id="aiBtn">✨ Explain with AI</button>
+        <button class="btn" id="claudeBtn" title="Opens Claude with this question filled in (uses your Claude subscription)">Ask Claude ↗</button>
         <span class="muted" id="aiNote"></span>
       </div>
+      <div class="ai-meta hidden" id="claudeMsg"></div>
       <div class="ai-out hidden" id="aiOut"></div>
       <div class="ai-meta hidden" id="aiMeta"></div>
       <form class="ai-ask hidden" id="aiAsk">
         <input id="aiInput" placeholder="Ask a follow-up…" autocomplete="off">
         <button class="btn" type="submit">Ask</button>
       </form>
+    </div>
+
+    <div class="notes" id="noteBox">
+      <label class="muted" for="noteText">📝 My notes for this question</label>
+      <textarea class="note" id="noteText" placeholder="Type a note – it saves automatically and syncs to your devices"></textarea>
+      <div class="ai-meta" id="noteStatus"></div>
     </div>
   </div>
 
@@ -127,6 +140,7 @@
   <div class="row tools">
     <button class="btn" id="retryBtn">Retry this question</button>
     <span class="grow"></span>
+    <button class="btn" id="notesBtn">📝 Notes</button>
     <button class="btn" id="historyBtn">History</button>
     <button class="btn" id="resetBtn">Finish &amp; start new attempt</button>
   </div>
@@ -248,7 +262,7 @@ function render() {
     if (next === undefined) {
       $("qnum").textContent = "";
       $("qtext").textContent = state.mode === "wrong" ? "No wrong answers to review in this attempt." : "You've answered every question in this attempt.";
-      $("opts").innerHTML = ""; $("verdict").textContent = ""; $("ai").classList.add("hidden");
+      $("opts").innerHTML = ""; $("verdict").textContent = ""; $("ai").classList.add("hidden"); $("noteBox").classList.add("hidden");
       $("retryBtn").classList.add("hidden");
       shownQid = null; return;
     }
@@ -276,9 +290,9 @@ function render() {
   if (rec) { v.textContent = rec.ok ? "Correct" : "Incorrect – the right answer is highlighted"; v.className = "verdict " + (rec.ok ? "ok" : "bad"); }
   else { v.textContent = ""; v.className = "verdict"; }
   $("retryBtn").classList.toggle("hidden", !rec);
-  $("ai").classList.toggle("hidden", !aiAvailable());
+  $("ai").classList.remove("hidden"); $("aiBtn").classList.toggle("hidden", !aiAvailable()); $("noteBox").classList.remove("hidden");
   $("aiNote").textContent = rec ? "" : "(reveals the answer)";
-  if (shownQid !== q.id) { shownQid = q.id; resetAiPanel(); }
+  if (shownQid !== q.id) { flushNote(); shownQid = q.id; resetAiPanel(); showNoteFor(q.id); }
 }
 function choose(q, text) {
   if (state.answers[q.id]) return;
@@ -354,8 +368,10 @@ $("resetBtn").onclick = async () => {
 const dlg = $("historyDlg");
 let historyCache = [];
 $("dlgClose").onclick = () => dlg.close();
+let dlgMode = "history";
 $("dlgBack").onclick = () => showHistoryList();
 $("historyBtn").onclick = async () => {
+  dlgMode = "history";
   dlg.showModal();
   if (!user) { $("dlgTitle").textContent = "Attempt history"; $("dlgBack").classList.add("hidden"); $("dlgBody").innerHTML = `<p class="muted">Sign in to save and view the history of your attempts.</p>`; return; }
   $("dlgBody").innerHTML = `<p class="muted">Loading…</p>`; $("dlgBack").classList.add("hidden");
@@ -394,6 +410,128 @@ function showAttempt(a) {
   $("dlgBody").querySelectorAll("button[data-go]").forEach(b => b.onclick = () => { dlg.close(); state.mode = "all"; $("mode").value = "all"; go(+b.dataset.go); });
   $("dlgBody").scrollTop = 0;
 }
+
+// ======================= Notes =======================
+// progress/{uid}/notes/{id}: id = question id, or "_general" for free-form notes.
+let notes = {}, notesUnsub = null, noteTimer = null, noteDirty = null;
+const notesCol = () => F.collection(db, "progress", user.uid, "notes");
+const noteRef = id => F.doc(db, "progress", user.uid, "notes", id);
+function showNoteFor(qid) {
+  const ta = $("noteText");
+  ta.value = (notes[qid] && notes[qid].text) || "";
+  $("noteStatus").textContent = notes[qid] ? `Saved ${fmtDate(notes[qid].updated)}` : "";
+}
+async function saveNote(id, text) {
+  if (!user) return;
+  const q = QBY[id];
+  try {
+    if (!text.trim()) { delete notes[id]; await F.deleteDoc(noteRef(id)); return "Deleted"; }
+    const rec = { text, updated: Date.now(), qid: q ? id : null, n: q ? q.i + 1 : null, q: q ? q.question : null };
+    notes[id] = rec;
+    await F.setDoc(noteRef(id), rec);
+    return "Saved";
+  } catch (e) { console.error(e); return "Couldn't save: " + e.message; }
+}
+function flushNote() {
+  if (!noteDirty) return;
+  clearTimeout(noteTimer);
+  const { id, text } = noteDirty; noteDirty = null;
+  saveNote(id, text);
+}
+$("noteText").addEventListener("input", () => {
+  if (!shownQid) return;
+  noteDirty = { id: shownQid, text: $("noteText").value };
+  $("noteStatus").textContent = "Saving…";
+  clearTimeout(noteTimer);
+  noteTimer = setTimeout(async () => {
+    if (!noteDirty) return;
+    const { id, text } = noteDirty; noteDirty = null;
+    const r = await saveNote(id, text);
+    if (shownQid === id) $("noteStatus").textContent = r === "Saved" ? `Saved ${fmtDate(Date.now())}` : r;
+  }, 700);
+});
+$("noteText").addEventListener("blur", flushNote);
+addEventListener("pagehide", flushNote);
+function startNotesSync() {
+  if (notesUnsub) notesUnsub();
+  notesUnsub = F.onSnapshot(notesCol(), snap => {
+    const next = {}; snap.forEach(d => { next[d.id] = d.data(); }); notes = next;
+    if (shownQid && document.activeElement !== $("noteText") && !noteDirty) showNoteFor(shownQid);
+    if (dlg.open && dlgMode === "notes" && document.activeElement?.id !== "generalNote") renderNotesList();
+  });
+}
+function stopNotesSync() { if (notesUnsub) { notesUnsub(); notesUnsub = null; } notes = {}; }
+
+function notesMarkdown() {
+  let md = `# CPSA notes\n\nExported ${fmtDate(Date.now())}\n\n`;
+  if (notes._general?.text) md += `## General notes\n\n${notes._general.text}\n\n`;
+  const items = Object.entries(notes).filter(([id]) => id !== "_general").sort((a, b) => (a[1].n || 0) - (b[1].n || 0));
+  for (const [id, r] of items) {
+    const q = QBY[id];
+    md += `## Q${r.n ?? "?"}. ${q ? q.question : r.q || ""}\n\n` + (q ? `Correct answer: ${q.answer}\n\n` : "") + `${r.text}\n\n`;
+  }
+  return md;
+}
+$("notesBtn").onclick = () => {
+  dlgMode = "notes";
+  $("dlgTitle").textContent = "My notes"; $("dlgBack").classList.add("hidden");
+  $("dlgBody").innerHTML = `
+    <div class="row"><button class="btn" id="notesExport">⬇ Download (.md)</button><button class="btn" id="notesCopy">Copy all</button><span class="muted" id="notesMsg"></span></div>
+    <h4 style="margin:14px 0 4px">General notes</h4>
+    <textarea class="note" id="generalNote" placeholder="Anything not tied to one question – saves automatically"></textarea>
+    <div class="ai-meta" id="generalStatus"></div>
+    <h4 style="margin:14px 0 6px">Question notes <span class="muted" id="notesCount"></span></h4>
+    <input class="search" id="notesSearch" placeholder="Search notes and questions…">
+    <div id="notesList"></div>`;
+  $("generalNote").value = notes._general?.text || "";
+  let gTimer = null;
+  $("generalNote").oninput = () => {
+    $("generalStatus").textContent = "Saving…"; clearTimeout(gTimer);
+    gTimer = setTimeout(async () => { const r = await saveNote("_general", $("generalNote").value); $("generalStatus").textContent = r; }, 700);
+  };
+  $("notesSearch").oninput = renderNotesList;
+  $("notesExport").onclick = () => {
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(new Blob([notesMarkdown()], { type: "text/markdown" }));
+    a.download = "cpsa-notes.md"; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+  };
+  $("notesCopy").onclick = async () => {
+    try { await navigator.clipboard.writeText(notesMarkdown()); $("notesMsg").textContent = "Copied"; }
+    catch { $("notesMsg").textContent = "Copy failed – use Download"; }
+  };
+  renderNotesList();
+  dlg.showModal();
+};
+function renderNotesList() {
+  const box = $("notesList"); if (!box) return;
+  const term = ($("notesSearch")?.value || "").toLowerCase().trim();
+  const items = Object.entries(notes).filter(([id]) => id !== "_general")
+    .map(([id, r]) => ({ id, ...r, qq: QBY[id] }))
+    .filter(r => !term || [r.text, r.qq?.question, r.qq?.answer].join(" ").toLowerCase().includes(term))
+    .sort((a, b) => (a.n || 0) - (b.n || 0));
+  $("notesCount").textContent = `(${items.length})`;
+  box.innerHTML = items.map(r => `<div class="noteitem">
+      <div class="q">Q${r.n ?? "?"}. ${esc(r.qq ? r.qq.question : r.q || "")}</div>
+      ${r.qq ? `<div class="c">✓ ${esc(r.qq.answer)}</div>` : ""}
+      <div class="t">${esc(r.text)}</div>
+      ${r.qq ? `<button class="btn" style="margin-top:6px" data-go="${r.qq.i}">Open question</button>` : ""}</div>`).join("")
+    || `<p class="muted">${term ? "No notes match." : "No question notes yet. Add one in the 📝 box under any question."}</p>`;
+  box.querySelectorAll("button[data-go]").forEach(b => b.onclick = () => { dlg.close(); state.mode = "all"; $("mode").value = "all"; go(+b.dataset.go); });
+}
+
+// ======================= Ask Claude (uses your claude.ai subscription) =======================
+$("claudeBtn").onclick = () => {
+  const q = Q[state.pos]; if (!q) return;
+  const rec = state.answers[q.id];
+  const prompt = `I'm studying for the CREST CPSA (Practitioner Security Analyst) exam. Explain this multiple-choice question.
+
+${promptFor(q)}` + (rec && !rec.ok ? `\n\nI answered "${rec.a}" – explain specifically why that's wrong.` : "") +
+    `\n\nIf the marked correct answer looks wrong or outdated, say so.`;
+  try { navigator.clipboard.writeText(prompt).catch(() => {}); } catch {}
+  window.open("https://claude.ai/new?q=" + encodeURIComponent(prompt), "_blank", "noopener");
+  $("claudeMsg").classList.remove("hidden");
+  $("claudeMsg").textContent = "Opened Claude in a new tab. The question is also copied – if Claude's message box is empty, just paste and send.";
+};
 
 // ======================= AI explanations =======================
 let aiModel = null, aiChat = null, aiBusy = false, aiTranscript = "";
@@ -458,9 +596,11 @@ function aiError(e) {
   console.error(e);
   const m = String(e && e.message || e);
   let hint = "";
-  if (/app.?check|attestation|appCheck/i.test(m)) hint = " App Check isn't set up for this site yet – see the README.";
-  else if (/not found|404|model/i.test(m)) hint = " The model name in firebase-config.js may be retired – pick a current one from Firebase AI Logic.";
+  if (/app.?check|attestation/i.test(m)) hint = " App Check is still enforced for AI Logic – set it to Unenforced in Firebase → Security → App Check → APIs.";
+  else if (/\b404\b|is not found|not supported for/i.test(m)) hint = " The model name in firebase-config.js may be retired – pick a current one from Firebase AI Logic.";
+  else if (/\b403\b|permission|has not been used|disabled/i.test(m)) hint = " Gemini isn't enabled for this project yet – open Firebase → AI Services → AI Logic → Get started → Gemini Developer API.";
   else if (/quota|429|exhausted/i.test(m)) hint = " You've hit the free-tier rate limit – try again in a minute.";
+  else if (/load failed|failed to fetch|network/i.test(m)) hint = " The connection to Google was cut off (no reply). Try turning off content blockers, VPN or iCloud Private Relay, or try another browser/network.";
   $("aiOut").classList.remove("hidden");
   $("aiOut").innerHTML += `<p style="color:var(--bad)">AI request failed: ${esc(m)}.${esc(hint)}</p>`;
 }
@@ -482,8 +622,18 @@ $("aiBtn").onclick = async () => {
       $("aiOut").innerHTML = md(text);
       aiChat = model.startChat({ history: [{ role: "user", parts: [{ text: prompt }] }, { role: "model", parts: [{ text }] }] });
     } else {
-      aiChat = model.startChat();
-      text = await streamInto(aiChat.sendMessageStream(prompt), "");
+      try {
+        aiChat = model.startChat();
+        text = await streamInto(aiChat.sendMessageStream(prompt), "");
+      } catch (err) {
+        if (!/load failed|failed to fetch|network|aborted/i.test(String(err && err.message))) throw err;
+        // Some mobile browsers drop streamed replies; retry once without streaming.
+        $("aiOut").innerHTML = `<p class="muted">Retrying…</p>`;
+        const r = await model.generateContent(prompt);
+        text = r.response.text();
+        $("aiOut").innerHTML = md(text);
+        aiChat = model.startChat({ history: [{ role: "user", parts: [{ text: prompt }] }, { role: "model", parts: [{ text }] }] });
+      }
       if (shownQid !== qid) return;
       if (user && text) F.setDoc(F.doc(db, "explanations", qid), { text, model: AI_CFG.model || "", createdAt: Date.now(), by: user.uid }).catch(console.error);
     }
@@ -505,7 +655,13 @@ $("aiAsk").onsubmit = async e => {
   const prefix = aiTranscript + `<p class="you">You: ${esc(question)}</p>`;
   $("aiOut").innerHTML = prefix + `<p class="muted">Thinking…</p>`;
   try {
-    const text = await streamInto(aiChat.sendMessageStream(question + extra), prefix);
+    let text;
+    try { text = await streamInto(aiChat.sendMessageStream(question + extra), prefix); }
+    catch (err) {
+      if (!/load failed|failed to fetch|network|aborted/i.test(String(err && err.message))) throw err;
+      text = (await aiChat.sendMessage(question + extra)).response.text();
+      $("aiOut").innerHTML = prefix + md(text);
+    }
     if (shownQid === qid) aiTranscript = prefix + md(text);
   } catch (err) { aiError(err); }
   finally { aiBusy = false; }
@@ -597,6 +753,7 @@ if (!FB_CFG.apiKey || FB_CFG.apiKey === "PASTE_HERE") {
     if (unsub) { unsub(); unsub = null; }
     user = u;
     if (!u) {
+      stopNotesSync();
       progRef = null; $("authBtn").textContent = "Sign in"; setSync("");
       showGate("Private quiz", "Sign in with the Google account that has access.", { signIn: true });
       return;
@@ -619,6 +776,7 @@ if (!FB_CFG.apiKey || FB_CFG.apiKey === "PASTE_HERE") {
       return;
     }
     showApp();
+    startNotesSync();
     $("mode").value = state.mode; render();
     // 2) Progress sync
     setSync("Loading…");
