@@ -531,7 +531,8 @@ ${promptFor(q)}` + (rec && !rec.ok ? `\n\nI answered "${rec.a}" – explain spec
   // claudeUrl can be a chat (all questions go into ONE conversation) or a project (each question = new chat in the project).
   const target = String(AI_CFG.claudeUrl || AI_CFG.claudeProjectUrl || "").trim();
   const kind = (target.match(/^https:\/\/claude\.ai\/(chat|project)\/[0-9a-f-]{20,}\/?$/i) || [])[1];
-  const url = kind ? target : "https://claude.ai/new?q=" + encodeURIComponent(prompt);
+  // Existing chat/project links have no documented prefill; add ?q= anyway (harmless if ignored).
+  const url = (kind ? target.replace(/\/$/, "") : "https://claude.ai/new") + "?q=" + encodeURIComponent(prompt);
   // Always reuse the same named tab, so repeated clicks don't pile up new tabs/windows.
   const w = window.open(url, "cpsa-claude");
   if (w) try { w.focus(); } catch {}
