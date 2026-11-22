@@ -1,0 +1,582 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="theme-color" content="#0f172a">
+<title>CPSA Practice Quiz</title>
+<style>
+  :root{--bg:#f6f7f9;--card:#fff;--ink:#111827;--muted:#6b7280;--line:#e5e7eb;--accent:#2563eb;--ok:#15803d;--okbg:#dcfce7;--bad:#b91c1c;--badbg:#fee2e2;--soft:#f1f5f9}
+  @media (prefers-color-scheme:dark){:root{--bg:#0b1020;--card:#141a2e;--ink:#e5e7eb;--muted:#9ca3af;--line:#273049;--accent:#60a5fa;--ok:#4ade80;--okbg:#12351f;--bad:#f87171;--badbg:#3b1414;--soft:#1b2238}}
+  *{box-sizing:border-box}
+  body{margin:0;font:16px/1.5 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;background:var(--bg);color:var(--ink);-webkit-tap-highlight-color:transparent}
+  header{position:sticky;top:0;z-index:5;background:var(--card);border-bottom:1px solid var(--line);padding:10px 14px;padding-top:max(10px,env(safe-area-inset-top))}
+  .row{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+  .grow{flex:1}
+  h1{font-size:17px;margin:0}
+  .stats{font-size:13px;color:var(--muted)}
+  .bar{height:4px;background:var(--line);border-radius:2px;margin-top:8px;overflow:hidden}
+  .bar>div{height:100%;background:var(--accent);width:0;transition:width .2s}
+  main{max-width:760px;margin:0 auto;padding:16px 14px 110px}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:18px}
+  .qnum{font-size:13px;color:var(--muted);margin-bottom:6px}
+  .qtext{font-size:18px;font-weight:600;margin:0 0 14px}
+  .opt{display:block;width:100%;text-align:left;font:inherit;color:inherit;background:transparent;border:1.5px solid var(--line);border-radius:10px;padding:12px 14px;margin:8px 0;cursor:pointer}
+  .opt:hover:not(:disabled){border-color:var(--accent)}
+  .opt:disabled{cursor:default}
+  .opt.correct{border-color:var(--ok);background:var(--okbg)}
+  .opt.wrong{border-color:var(--bad);background:var(--badbg)}
+  .opt .k{display:inline-block;min-width:1.4em;color:var(--muted);font-weight:600}
+  .verdict{margin-top:10px;font-weight:600}
+  .verdict.ok{color:var(--ok)} .verdict.bad{color:var(--bad)}
+  button.btn,select.btn{font:inherit;font-size:14px;border:1px solid var(--line);background:var(--card);color:var(--ink);border-radius:8px;padding:8px 12px;cursor:pointer}
+  button.btn:disabled{opacity:.5;cursor:default}
+  button.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+  footer{position:fixed;bottom:0;left:0;right:0;background:var(--card);border-top:1px solid var(--line);padding:10px 14px;padding-bottom:max(10px,env(safe-area-inset-bottom));z-index:5}
+  footer .row{max-width:760px;margin:0 auto}
+  footer button.btn{padding:12px 16px;font-size:15px}
+  input.jump{width:5.5em;font:inherit;font-size:14px;padding:7px 8px;border:1px solid var(--line);border-radius:8px;background:var(--card);color:var(--ink)}
+  .sync{font-size:12px;color:var(--muted)}
+  .muted{color:var(--muted);font-size:14px}
+  .tools{margin-top:12px}
+  .hidden{display:none!important}
+  /* AI panel */
+  .ai{margin-top:16px;border-top:1px dashed var(--line);padding-top:14px}
+  .ai-out{background:var(--soft);border-radius:10px;padding:12px 14px;margin-top:10px;font-size:15px;overflow-wrap:anywhere}
+  .ai-out p{margin:.4em 0} .ai-out ul{margin:.4em 0;padding-left:1.3em}
+  .ai-out code{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:.92em;background:var(--card);padding:1px 4px;border-radius:4px}
+  .ai-out pre{background:var(--card);padding:8px;border-radius:6px;overflow:auto}
+  .ai-out .you{font-weight:600;margin-top:.8em;color:var(--accent)}
+  .ai-ask{display:flex;gap:8px;margin-top:10px}
+  .ai-ask input{flex:1;min-width:0;font:inherit;font-size:15px;padding:9px 10px;border:1px solid var(--line);border-radius:8px;background:var(--card);color:var(--ink)}
+  .ai-meta{font-size:12px;color:var(--muted);margin-top:6px}
+  /* history dialog */
+  dialog{border:none;border-radius:14px;padding:0;width:min(720px,96vw);max-height:88vh;background:var(--card);color:var(--ink)}
+  dialog::backdrop{background:rgba(0,0,0,.45)}
+  .dlg-head{position:sticky;top:0;background:var(--card);padding:14px 16px;border-bottom:1px solid var(--line);display:flex;align-items:center;gap:8px}
+  .dlg-body{padding:12px 16px 18px}
+  .att{border:1px solid var(--line);border-radius:10px;padding:10px 12px;margin:8px 0}
+  .att h4{margin:0 0 2px;font-size:15px}
+  .wrongitem{border-left:3px solid var(--bad);padding:6px 10px;margin:10px 0;background:var(--soft);border-radius:0 8px 8px 0;font-size:14px}
+  .wrongitem .q{font-weight:600}
+  .wrongitem .y{color:var(--bad)} .wrongitem .c{color:var(--ok)}
+</style>
+</head>
+<body>
+<header>
+  <div class="row">
+    <h1 class="grow">CPSA Practice <span class="muted" id="attemptLbl"></span></h1>
+    <span class="sync" id="sync">Not signed in</span>
+    <button class="btn" id="authBtn">Sign in</button>
+  </div>
+  <div class="row stats" style="margin-top:4px"><span id="stats" class="grow"></span></div>
+  <div class="bar"><div id="bar"></div></div>
+</header>
+
+<main>
+  <div class="card" id="card">
+    <div class="qnum" id="qnum"></div>
+    <p class="qtext" id="qtext"></p>
+    <div id="opts"></div>
+    <div class="verdict" id="verdict"></div>
+
+    <div class="ai" id="ai">
+      <div class="row">
+        <button class="btn" id="aiBtn">✨ Explain with AI</button>
+        <span class="muted" id="aiNote"></span>
+      </div>
+      <div class="ai-out hidden" id="aiOut"></div>
+      <div class="ai-meta hidden" id="aiMeta"></div>
+      <form class="ai-ask hidden" id="aiAsk">
+        <input id="aiInput" placeholder="Ask a follow-up…" autocomplete="off">
+        <button class="btn" type="submit">Ask</button>
+      </form>
+    </div>
+  </div>
+
+  <div class="row tools">
+    <label class="muted" for="mode">Show:</label>
+    <select class="btn" id="mode">
+      <option value="all">All questions</option>
+      <option value="unanswered">Unanswered only</option>
+      <option value="wrong">Ones I got wrong</option>
+    </select>
+    <span class="grow"></span>
+    <input class="jump" id="jump" type="number" min="1" placeholder="Go to #" inputmode="numeric">
+    <button class="btn" id="jumpBtn">Go</button>
+  </div>
+  <div class="row tools">
+    <button class="btn" id="retryBtn">Retry this question</button>
+    <span class="grow"></span>
+    <button class="btn" id="historyBtn">History</button>
+    <button class="btn" id="resetBtn">Finish &amp; start new attempt</button>
+  </div>
+  <p class="muted">Tip: on a keyboard, press 1–5 to answer and ← → to move. Sign in to sync progress and keep a history of every attempt.</p>
+</main>
+
+<footer>
+  <div class="row">
+    <button class="btn" id="prevBtn">← Prev</button>
+    <span class="grow"></span>
+    <button class="btn" id="nextUnBtn">Next unanswered</button>
+    <button class="btn primary" id="nextBtn">Next →</button>
+  </div>
+</footer>
+
+<dialog id="historyDlg">
+  <div class="dlg-head"><strong class="grow" id="dlgTitle">Attempt history</strong><button class="btn" id="dlgBack">← Back</button><button class="btn" id="dlgClose">Close</button></div>
+  <div class="dlg-body" id="dlgBody"></div>
+</dialog>
+
+<script src="questions.js"></script>
+<script src="firebase-config.js"></script>
+<script type="module">
+const Q = window.QUIZ_DATA;                                 // [{id, question, answer, incorrect[]}]
+const QBY = Object.fromEntries(Q.map((q, i) => [q.id, { ...q, i }]));
+const FB_CFG = window.FIREBASE_CONFIG || {};
+const AI_CFG = window.AI_CONFIG || {};
+const SDK = "https://www.gstatic.com/firebasejs/13.4.0";
+const LS_KEY = "cpsa-progress-v2";
+const $ = id => document.getElementById(id);
+const esc = s => String(s).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+const rid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+const fmtDate = t => new Date(t).toLocaleString(undefined, { day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" });
+
+// ======================= state =======================
+// state = { attemptId, attemptNo, startedAt, answers:{[qid]:{a,ok,t}}, pos, mode, updated }
+const newAttempt = (no = 1) => ({ attemptId: rid(), attemptNo: no, startedAt: Date.now(), answers: {}, pos: 0, mode: "all", updated: Date.now() });
+function loadLocal() {
+  try { const s = JSON.parse(localStorage.getItem(LS_KEY)); if (s && s.attemptId) return s; } catch {}
+  try { // migrate from the first version of this page
+    const o = JSON.parse(localStorage.getItem("cpsa-progress-v1"));
+    if (o && o.answers) return { ...newAttempt(1), answers: o.answers, pos: o.pos || 0, mode: o.mode || "all" };
+  } catch {}
+  return newAttempt(1);
+}
+let state = loadLocal();
+const saveLocal = () => { try { localStorage.setItem(LS_KEY, JSON.stringify(state)); } catch {} };
+const serialize = s => ({ attemptId: s.attemptId, attemptNo: s.attemptNo, startedAt: s.startedAt, answers: s.answers, pos: s.pos, mode: s.mode, updated: s.updated });
+
+// Firebase handles (filled in if configured)
+let app = null, A = null, F = null, auth = null, db = null, user = null, progRef = null;
+let pendingAnswers = {}, pendingMeta = false, flushTimer = null;
+const setSync = t => { $("sync").textContent = t; };
+
+// Every change is pushed to Firestore within ~0.4s as a small field update.
+function persist(changedQid) {
+  state.updated = Date.now();
+  saveLocal();
+  if (!user) return;
+  if (changedQid !== undefined) pendingAnswers[changedQid] = state.answers[changedQid] || null;
+  pendingMeta = true;
+  clearTimeout(flushTimer);
+  setSync("Saving…");
+  flushTimer = setTimeout(flush, 400);
+}
+async function flush() {
+  if (!user || (!pendingMeta && !Object.keys(pendingAnswers).length)) return;
+  const upd = { pos: state.pos, mode: state.mode, updated: state.updated };
+  for (const [k, v] of Object.entries(pendingAnswers)) upd[`answers.${k}`] = v ? v : F.deleteField();
+  const attemptAtSend = state.attemptId;
+  pendingAnswers = {}; pendingMeta = false;
+  try {
+    await F.updateDoc(progRef, upd);
+    if (attemptAtSend === state.attemptId) setSync("Synced");
+  } catch (e) {
+    console.error(e); setSync("Sync failed – retrying");
+    pendingMeta = true; flushTimer = setTimeout(() => { // resend the full doc on retry
+      F.setDoc(progRef, serialize(state)).then(() => { pendingMeta = false; setSync("Synced"); }).catch(() => setSync("Offline – saved on this device"));
+    }, 4000);
+  }
+}
+addEventListener("pagehide", () => { clearTimeout(flushTimer); flush(); });
+document.addEventListener("visibilitychange", () => { if (document.visibilityState === "hidden") { clearTimeout(flushTimer); flush(); } });
+
+// ======================= quiz view =======================
+const optOrder = {};
+function visibleList() {
+  const idx = Q.map((q, i) => i);
+  if (state.mode === "unanswered") return idx.filter(i => !state.answers[Q[i].id]);
+  if (state.mode === "wrong") return idx.filter(i => state.answers[Q[i].id] && !state.answers[Q[i].id].ok);
+  return idx;
+}
+function shuffled(q) {
+  if (!optOrder[q.id]) {
+    const a = [...q.incorrect, q.answer];
+    for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; }
+    optOrder[q.id] = a;
+  }
+  return optOrder[q.id];
+}
+function tally(answers) {
+  const v = Object.values(answers), right = v.filter(x => x.ok).length;
+  return { answered: v.length, correct: right, wrong: v.length - right, total: Q.length };
+}
+function renderStats() {
+  const t = tally(state.answers), pct = t.answered ? Math.round(t.correct / t.answered * 100) : 0;
+  $("attemptLbl").textContent = `· Attempt ${state.attemptNo}`;
+  $("stats").textContent = `${t.answered} / ${Q.length} answered · ${t.correct} correct (${pct}%) · ${t.wrong} wrong`;
+  $("bar").style.width = (t.answered / Q.length * 100) + "%";
+}
+let shownQid = null;
+function render() {
+  renderStats();
+  state.pos = Math.max(0, Math.min(state.pos | 0, Q.length - 1));
+  const list = visibleList();
+  if (state.mode !== "all" && !list.includes(state.pos)) {
+    const next = list.find(i => i > state.pos) ?? list[0];
+    if (next === undefined) {
+      $("qnum").textContent = "";
+      $("qtext").textContent = state.mode === "wrong" ? "No wrong answers to review in this attempt." : "You've answered every question in this attempt.";
+      $("opts").innerHTML = ""; $("verdict").textContent = ""; $("ai").classList.add("hidden");
+      $("retryBtn").classList.add("hidden");
+      shownQid = null; return;
+    }
+    state.pos = next;
+  }
+  const q = Q[state.pos], rec = state.answers[q.id];
+  const idx = list.indexOf(state.pos);
+  $("qnum").textContent = `Question ${state.pos + 1} of ${Q.length}` + (state.mode !== "all" ? `  ·  ${idx + 1} of ${list.length} in this view` : "");
+  $("qtext").textContent = q.question;
+  const opts = $("opts"); opts.innerHTML = "";
+  shuffled(q).forEach((text, i) => {
+    const b = document.createElement("button");
+    b.className = "opt";
+    b.innerHTML = `<span class="k">${i + 1}.</span> `;
+    b.appendChild(document.createTextNode(text));
+    if (rec) {
+      b.disabled = true;
+      if (text === q.answer) b.classList.add("correct");
+      else if (text === rec.a) b.classList.add("wrong");
+    }
+    b.onclick = () => choose(q, text);
+    opts.appendChild(b);
+  });
+  const v = $("verdict");
+  if (rec) { v.textContent = rec.ok ? "Correct" : "Incorrect – the right answer is highlighted"; v.className = "verdict " + (rec.ok ? "ok" : "bad"); }
+  else { v.textContent = ""; v.className = "verdict"; }
+  $("retryBtn").classList.toggle("hidden", !rec);
+  $("ai").classList.toggle("hidden", !aiAvailable());
+  $("aiNote").textContent = rec ? "" : "(reveals the answer)";
+  if (shownQid !== q.id) { shownQid = q.id; resetAiPanel(); }
+}
+function choose(q, text) {
+  if (state.answers[q.id]) return;
+  state.answers[q.id] = { a: text, ok: text === q.answer, t: Date.now() };
+  persist(q.id); render();
+}
+function go(pos) { state.pos = pos; persist(); render(); window.scrollTo(0, 0); }
+function move(dir) {
+  const list = visibleList(); if (!list.length) return;
+  const i = list.indexOf(state.pos);
+  const n = i === -1 ? (dir > 0 ? list.find(x => x > state.pos) : [...list].reverse().find(x => x < state.pos)) : list[i + dir];
+  if (n !== undefined) go(n);
+}
+function nextUnanswered() {
+  let n = Q.findIndex((q, i) => i > state.pos && !state.answers[q.id]);
+  if (n === -1) n = Q.findIndex(q => !state.answers[q.id]);
+  if (n === -1) { alert("You've answered every question in this attempt."); return; }
+  go(n);
+}
+
+$("prevBtn").onclick = () => move(-1);
+$("nextBtn").onclick = () => move(1);
+$("nextUnBtn").onclick = nextUnanswered;
+$("mode").onchange = e => { state.mode = e.target.value; persist(); render(); };
+$("jumpBtn").onclick = () => {
+  const n = parseInt($("jump").value, 10);
+  if (n >= 1 && n <= Q.length) { state.mode = "all"; $("mode").value = "all"; $("jump").value = ""; go(n - 1); }
+};
+$("jump").addEventListener("keydown", e => { if (e.key === "Enter") $("jumpBtn").click(); });
+$("retryBtn").onclick = () => { const q = Q[state.pos]; delete state.answers[q.id]; delete optOrder[q.id]; persist(q.id); render(); };
+document.addEventListener("keydown", e => {
+  if (["INPUT", "SELECT", "TEXTAREA"].includes(e.target.tagName) || $("historyDlg").open) return;
+  if (e.key === "ArrowRight") move(1);
+  else if (e.key === "ArrowLeft") move(-1);
+  else if (/^[1-9]$/.test(e.key)) { const b = $("opts").children[+e.key - 1]; if (b && !b.disabled) b.click(); }
+});
+
+// ======================= attempts =======================
+function attemptRecord(s) {
+  const answers = {};
+  for (const [qid, r] of Object.entries(s.answers)) {
+    const q = QBY[qid];
+    answers[qid] = { a: r.a, ok: r.ok, t: r.t || null, correct: q ? q.answer : null, q: q ? q.question : null, n: q ? q.i + 1 : null };
+  }
+  return { attemptId: s.attemptId, attemptNo: s.attemptNo, startedAt: s.startedAt, finishedAt: Date.now(), ...tally(s.answers), answers };
+}
+$("resetBtn").onclick = async () => {
+  const t = tally(state.answers);
+  if (!t.answered) { alert("Nothing answered in this attempt yet."); return; }
+  const msg = user
+    ? `Finish attempt ${state.attemptNo} and start a fresh one?\n\nIt will be saved to your history: ${t.answered} answered, ${t.correct} correct, ${t.wrong} wrong.`
+    : `Start a fresh attempt?\n\nYou're not signed in, so attempt ${state.attemptNo} will NOT be saved to history. Sign in first to keep it.`;
+  if (!confirm(msg)) return;
+  const finished = state;
+  state = newAttempt(finished.attemptNo + 1);
+  for (const k in optOrder) delete optOrder[k];
+  shownQid = null;
+  saveLocal(); render(); window.scrollTo(0, 0);
+  if (user) {
+    clearTimeout(flushTimer); pendingAnswers = {}; pendingMeta = false;
+    setSync("Saving…");
+    try {
+      const b = F.writeBatch(db);
+      b.set(F.doc(db, "progress", user.uid, "attempts", finished.attemptId), attemptRecord(finished));
+      b.set(progRef, serialize(state));
+      await b.commit();
+      setSync("Synced");
+    } catch (e) { console.error(e); setSync("Sync failed"); alert("Couldn't save the attempt to the database: " + e.message); }
+  }
+};
+
+// History dialog
+const dlg = $("historyDlg");
+let historyCache = [];
+$("dlgClose").onclick = () => dlg.close();
+$("dlgBack").onclick = () => showHistoryList();
+$("historyBtn").onclick = async () => {
+  dlg.showModal();
+  if (!user) { $("dlgTitle").textContent = "Attempt history"; $("dlgBack").classList.add("hidden"); $("dlgBody").innerHTML = `<p class="muted">Sign in to save and view the history of your attempts.</p>`; return; }
+  $("dlgBody").innerHTML = `<p class="muted">Loading…</p>`; $("dlgBack").classList.add("hidden");
+  try {
+    const snap = await F.getDocs(F.query(F.collection(db, "progress", user.uid, "attempts"), F.orderBy("startedAt", "desc")));
+    historyCache = snap.docs.map(d => d.data());
+    showHistoryList();
+  } catch (e) { $("dlgBody").innerHTML = `<p class="muted">Couldn't load history: ${esc(e.message)}</p>`; }
+};
+function showHistoryList() {
+  $("dlgTitle").textContent = "Attempt history"; $("dlgBack").classList.add("hidden");
+  const cur = tally(state.answers);
+  const pct = (c, a) => a ? Math.round(c / a * 100) : 0;
+  let h = `<div class="att"><h4>Attempt ${state.attemptNo} · in progress</h4><div class="muted">Started ${fmtDate(state.startedAt)} · ${cur.answered}/${cur.total} answered · ${cur.correct} correct (${pct(cur.correct, cur.answered)}%) · ${cur.wrong} wrong</div></div>`;
+  if (!historyCache.length) h += `<p class="muted">No finished attempts yet. Use “Finish &amp; start new attempt” to save one.</p>`;
+  historyCache.forEach((a, i) => {
+    h += `<div class="att"><h4>Attempt ${a.attemptNo}${a.offline ? ` <span class="muted">(done while signed out on another device)</span>` : ""}</h4>
+      <div class="muted">${fmtDate(a.startedAt)} → ${fmtDate(a.finishedAt)}<br>${a.answered}/${a.total} answered · ${a.correct} correct (${pct(a.correct, a.answered)}% of answered, ${pct(a.correct, a.total)}% of all) · ${a.wrong} wrong</div>
+      <div class="row" style="margin-top:6px"><button class="btn" data-i="${i}">View answers</button></div></div>`;
+  });
+  $("dlgBody").innerHTML = h;
+  $("dlgBody").querySelectorAll("button[data-i]").forEach(b => b.onclick = () => showAttempt(historyCache[+b.dataset.i]));
+}
+function showAttempt(a) {
+  $("dlgTitle").textContent = `Attempt ${a.attemptNo}`; $("dlgBack").classList.remove("hidden");
+  const items = Object.entries(a.answers || {}).map(([qid, r]) => ({ qid, ...r })).sort((x, y) => (x.n || 0) - (y.n || 0));
+  const wrong = items.filter(r => !r.ok), right = items.filter(r => r.ok);
+  const block = (r, ok) => `<div class="wrongitem" style="${ok ? "border-left-color:var(--ok)" : ""}">
+      <div class="q">Q${r.n ?? "?"}. ${esc(r.q ?? "(question no longer in bank)")}</div>
+      ${ok ? `<div class="c">✓ ${esc(r.a)}</div>` : `<div class="y">✗ You: ${esc(r.a)}</div><div class="c">✓ Correct: ${esc(r.correct ?? "?")}</div>`}
+      ${QBY[r.qid] ? `<button class="btn" style="margin-top:6px" data-go="${QBY[r.qid].i}">Open question</button>` : ""}</div>`;
+  $("dlgBody").innerHTML =
+    `<p class="muted">${a.answered} answered · ${a.correct} correct · ${a.wrong} wrong · ${a.total - a.answered} skipped</p>
+     <h4>Wrong (${wrong.length})</h4>${wrong.map(r => block(r, false)).join("") || `<p class="muted">None.</p>`}
+     <details><summary class="muted" style="cursor:pointer;margin-top:12px">Correct (${right.length})</summary>${right.map(r => block(r, true)).join("")}</details>`;
+  $("dlgBody").querySelectorAll("button[data-go]").forEach(b => b.onclick = () => { dlg.close(); state.mode = "all"; $("mode").value = "all"; go(+b.dataset.go); });
+  $("dlgBody").scrollTop = 0;
+}
+
+// ======================= AI explanations =======================
+let aiModel = null, aiChat = null, aiBusy = false, aiTranscript = "";
+const aiAvailable = () => !!app && AI_CFG.enabled !== false;
+const SYSTEM = `You are a concise tutor helping someone prepare for the CREST Practitioner Security Analyst (CPSA) exam.
+Explain multiple-choice questions on networking, protocols, operating systems, web and infrastructure security, cryptography and penetration testing.
+Use plain language, short paragraphs and bullet points. Use Markdown (bold, bullets, inline code) but no tables or headings larger than bold text.
+If the answer marked as correct looks wrong or outdated, say so clearly and explain why.`;
+function promptFor(q) {
+  return `Question: ${q.question}
+
+Correct answer (per the question bank): ${q.answer}
+
+Other options:
+${q.incorrect.map(o => "- " + o).join("\n")}
+
+1. Explain why the correct answer is right, with the underlying concept.
+2. Briefly say why each other option is wrong.
+3. End with a one-line memory tip.
+Keep it under about 250 words.`;
+}
+function md(s) {
+  const blocks = esc(s).replace(/\r/g, "").split(/```/);
+  return blocks.map((b, i) => {
+    if (i % 2) return `<pre><code>${b.replace(/^\w*\n/, "")}</code></pre>`;
+    const inline = t => t.replace(/`([^`]+)`/g, "<code>$1</code>").replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>").replace(/(^|[^*])\*([^*\n]+)\*/g, "$1<em>$2</em>").replace(/^#{1,6}\s*(.+)$/gm, "<strong>$1</strong>");
+    let html = "", list = null;
+    for (const line of b.split("\n")) {
+      const m = line.match(/^\s*(?:[-*•]|\d+[.)])\s+(.*)$/);
+      if (m) { if (!list) { list = []; } list.push(`<li>${inline(m[1])}</li>`); continue; }
+      if (list) { html += `<ul>${list.join("")}</ul>`; list = null; }
+      if (line.trim()) html += `<p>${inline(line)}</p>`;
+    }
+    if (list) html += `<ul>${list.join("")}</ul>`;
+    return html;
+  }).join("");
+}
+function resetAiPanel() {
+  aiChat = null; aiTranscript = ""; aiBusy = false;
+  $("aiOut").classList.add("hidden"); $("aiOut").innerHTML = "";
+  $("aiMeta").classList.add("hidden"); $("aiAsk").classList.add("hidden");
+  $("aiBtn").disabled = false; $("aiBtn").textContent = "✨ Explain with AI";
+  delete $("aiBtn").dataset.regen;
+}
+async function getModel() {
+  if (aiModel) return aiModel;
+  const AI = await import(`${SDK}/firebase-ai.js`);
+  const ai = AI.getAI(app, { backend: new AI.GoogleAIBackend() });
+  aiModel = AI.getGenerativeModel(ai, { model: AI_CFG.model || "gemini-3.5-flash", systemInstruction: SYSTEM });
+  return aiModel;
+}
+async function streamInto(promise, prefixHtml) {
+  const out = $("aiOut"); let text = "";
+  const res = await promise;
+  for await (const chunk of res.stream) {
+    text += chunk.text();
+    out.innerHTML = prefixHtml + md(text);
+  }
+  return text;
+}
+function aiError(e) {
+  console.error(e);
+  const m = String(e && e.message || e);
+  let hint = "";
+  if (/app.?check|attestation|appCheck/i.test(m)) hint = " App Check isn't set up for this site yet – see the README.";
+  else if (/not found|404|model/i.test(m)) hint = " The model name in firebase-config.js may be retired – pick a current one from Firebase AI Logic.";
+  else if (/quota|429|exhausted/i.test(m)) hint = " You've hit the free-tier rate limit – try again in a minute.";
+  $("aiOut").classList.remove("hidden");
+  $("aiOut").innerHTML += `<p style="color:var(--bad)">AI request failed: ${esc(m)}.${esc(hint)}</p>`;
+}
+$("aiBtn").onclick = async () => {
+  if (aiBusy) return;
+  const q = Q[state.pos]; const qid = q.id;
+  aiBusy = true; $("aiBtn").disabled = true; $("aiBtn").textContent = "Thinking…";
+  $("aiOut").classList.remove("hidden"); $("aiOut").innerHTML = `<p class="muted">Thinking…</p>`;
+  try {
+    const model = await getModel();
+    const prompt = promptFor(q);
+    let text = null, cachedFrom = null;
+    const regenerate = $("aiBtn").dataset.regen === qid;
+    if (user && !regenerate) {
+      try { const c = await F.getDoc(F.doc(db, "explanations", qid)); if (c.exists()) { text = c.data().text; cachedFrom = c.data(); } } catch {}
+    }
+    if (shownQid !== qid) return;
+    if (text) {
+      $("aiOut").innerHTML = md(text);
+      aiChat = model.startChat({ history: [{ role: "user", parts: [{ text: prompt }] }, { role: "model", parts: [{ text }] }] });
+    } else {
+      aiChat = model.startChat();
+      text = await streamInto(aiChat.sendMessageStream(prompt), "");
+      if (shownQid !== qid) return;
+      if (user && text) F.setDoc(F.doc(db, "explanations", qid), { text, model: AI_CFG.model || "", createdAt: Date.now(), by: user.uid }).catch(console.error);
+    }
+    aiTranscript = $("aiOut").innerHTML;
+    $("aiMeta").classList.remove("hidden");
+    $("aiMeta").textContent = (cachedFrom ? `Saved explanation (${fmtDate(cachedFrom.createdAt)}). ` : "") + "AI can be wrong – double-check anything that matters.";
+    $("aiAsk").classList.remove("hidden");
+    $("aiBtn").textContent = "↻ Regenerate"; $("aiBtn").dataset.regen = qid; $("aiNote").textContent = "";
+  } catch (e) { aiError(e); $("aiBtn").textContent = "✨ Explain with AI"; }
+  finally { aiBusy = false; $("aiBtn").disabled = false; }
+};
+$("aiAsk").onsubmit = async e => {
+  e.preventDefault();
+  const input = $("aiInput"), question = input.value.trim();
+  if (!question || !aiChat || aiBusy) return;
+  const qid = shownQid, rec = state.answers[qid];
+  const extra = rec && !rec.ok ? ` (Context: I picked "${rec.a}".)` : "";
+  input.value = ""; aiBusy = true;
+  const prefix = aiTranscript + `<p class="you">You: ${esc(question)}</p>`;
+  $("aiOut").innerHTML = prefix + `<p class="muted">Thinking…</p>`;
+  try {
+    const text = await streamInto(aiChat.sendMessageStream(question + extra), prefix);
+    if (shownQid === qid) aiTranscript = prefix + md(text);
+  } catch (err) { aiError(err); }
+  finally { aiBusy = false; }
+};
+
+// ======================= boot =======================
+$("mode").value = state.mode;
+render();
+
+if (!FB_CFG.apiKey || FB_CFG.apiKey === "PASTE_HERE") {
+  $("authBtn").classList.add("hidden");
+  setSync("Firebase not configured – saving on this device only");
+  $("ai").classList.add("hidden");
+} else {
+  const [appMod, authMod, fsMod] = await Promise.all([
+    import(`${SDK}/firebase-app.js`), import(`${SDK}/firebase-auth.js`), import(`${SDK}/firebase-firestore.js`)
+  ]);
+  A = authMod; F = fsMod;
+  app = appMod.initializeApp(FB_CFG);
+  const emu = /^(localhost|127\.0\.0\.1)$/.test(location.hostname) && new URLSearchParams(location.search).has("emu");
+  if (AI_CFG.recaptchaSiteKey && AI_CFG.recaptchaSiteKey !== "PASTE_HERE" && !emu) {
+    try {
+      const AC = await import(`${SDK}/firebase-app-check.js`);
+      AC.initializeAppCheck(app, { provider: new AC.ReCaptchaV3Provider(AI_CFG.recaptchaSiteKey), isTokenAutoRefreshEnabled: true });
+    } catch (e) { console.warn("App Check init failed", e); }
+  }
+  auth = A.getAuth(app);
+  try { db = F.initializeFirestore(app, { localCache: F.persistentLocalCache({ tabManager: F.persistentMultipleTabManager() }) }); }
+  catch { db = F.getFirestore(app); }
+  if (emu) { // local testing against the Firebase emulators only
+    A.connectAuthEmulator(auth, "http://127.0.0.1:9099", { disableWarnings: true });
+    F.connectFirestoreEmulator(db, "127.0.0.1", 8080);
+    window.__fb = { A, auth };
+  }
+  A.getRedirectResult(auth).catch(() => {});
+  render();
+
+  $("authBtn").onclick = async () => {
+    if (user) { await flush(); await A.signOut(auth); return; }
+    const provider = new A.GoogleAuthProvider();
+    try { await A.signInWithPopup(auth, provider); }
+    catch (e) {
+      if (["auth/popup-blocked", "auth/operation-not-supported-in-this-environment"].includes(e.code)) await A.signInWithRedirect(auth, provider);
+      else if (!["auth/popup-closed-by-user", "auth/cancelled-popup-request"].includes(e.code)) alert("Sign-in failed: " + e.message);
+    }
+  };
+
+  let unsub = null;
+  A.onAuthStateChanged(auth, async u => {
+    if (unsub) { unsub(); unsub = null; }
+    user = u;
+    if (!u) { progRef = null; $("authBtn").textContent = "Sign in"; setSync("Not signed in – saving on this device"); return; }
+    $("authBtn").textContent = "Sign out";
+    setSync("Loading…");
+    progRef = F.doc(db, "progress", u.uid);
+    try {
+      const snap = await F.getDoc(progRef);
+      const remote = snap.exists() ? snap.data() : null;
+      if (remote && remote.attemptId === state.attemptId) {
+        // Same attempt on both sides: keep every answer, newest wins per question.
+        const merged = { ...state.answers };
+        for (const [k, v] of Object.entries(remote.answers || {})) if (!merged[k] || (v.t || 0) > (merged[k].t || 0)) merged[k] = v;
+        const remoteNewer = (remote.updated || 0) > (state.updated || 0);
+        state = { ...state, answers: merged, pos: remoteNewer ? remote.pos : state.pos, mode: remoteNewer ? remote.mode : state.mode };
+      } else if (remote) {
+        // Different attempt in the cloud. If this device holds answers for an attempt that
+        // was never archived, save it to history so nothing is lost, then switch to the cloud one.
+        if (Object.keys(state.answers).length) {
+          const archived = await F.getDoc(F.doc(db, "progress", u.uid, "attempts", state.attemptId));
+          if (!archived.exists()) await F.setDoc(F.doc(db, "progress", u.uid, "attempts", state.attemptId), { ...attemptRecord(state), offline: true });
+        }
+        state = { ...newAttempt(), ...remote, answers: remote.answers || {} };
+      }
+      state.updated = Date.now();
+      $("mode").value = state.mode; saveLocal(); render();
+      await F.setDoc(progRef, serialize(state));
+      setSync("Synced");
+      unsub = F.onSnapshot(progRef, s => {   // live updates from your other devices
+        if (!s.exists() || s.metadata.hasPendingWrites) return;
+        if (pendingMeta || Object.keys(pendingAnswers).length) return;
+        const d = s.data();
+        const otherAttempt = d.attemptId !== state.attemptId;
+        if (otherAttempt || (d.updated || 0) > (state.updated || 0)) {
+          if (otherAttempt) { for (const k in optOrder) delete optOrder[k]; }
+          state = { ...newAttempt(), ...d, answers: d.answers || {} };
+          $("mode").value = state.mode; saveLocal(); render();
+        }
+      });
+    } catch (e) { console.error(e); setSync("Sync failed – saving on this device"); }
+  });
+}
+</script>
+</body>
+</html>
