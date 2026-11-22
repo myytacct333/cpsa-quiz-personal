@@ -528,9 +528,18 @@ $("claudeBtn").onclick = () => {
 ${promptFor(q)}` + (rec && !rec.ok ? `\n\nI answered "${rec.a}" – explain specifically why that's wrong.` : "") +
     `\n\nIf the marked correct answer looks wrong or outdated, say so.`;
   try { navigator.clipboard.writeText(prompt).catch(() => {}); } catch {}
-  window.open("https://claude.ai/new?q=" + encodeURIComponent(prompt), "_blank", "noopener");
+  // claudeUrl can be a chat (all questions go into ONE conversation) or a project (each question = new chat in the project).
+  const target = String(AI_CFG.claudeUrl || AI_CFG.claudeProjectUrl || "").trim();
+  const kind = (target.match(/^https:\/\/claude\.ai\/(chat|project)\/[0-9a-f-]{20,}\/?$/i) || [])[1];
+  const url = kind ? target : "https://claude.ai/new?q=" + encodeURIComponent(prompt);
+  // Always reuse the same named tab, so repeated clicks don't pile up new tabs/windows.
+  const w = window.open(url, "cpsa-claude");
+  if (w) try { w.focus(); } catch {}
   $("claudeMsg").classList.remove("hidden");
-  $("claudeMsg").textContent = "Opened Claude in a new tab. The question is also copied – if Claude's message box is empty, just paste and send.";
+  $("claudeMsg").textContent =
+    kind === "chat" ? "Opened your CPSA chat in Claude. The question is copied – paste it (Ctrl/Cmd+V, or long-press → Paste) and send."
+    : kind === "project" ? "Opened your CREST CPSA project in Claude. The question is copied – paste it into the message box and send."
+    : "Opened Claude. The question is also copied – if Claude's message box is empty, just paste and send.";
 };
 
 // ======================= AI explanations =======================
